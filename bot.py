@@ -15,7 +15,7 @@ import mysql.connector
 # The above code is importing the `Error` class from the `mysql.connector` module in Python. This
 # class is typically used to handle errors that may occur when working with a MySQL database using the
 # `mysql.connector` module.
-from mysql.connector import Error
+
 # The above code is importing the `load_dotenv` function from the `dotenv` module. This function is
 # used to load environment variables from a `.env` file into the current environment.
 from dotenv import load_dotenv
@@ -24,6 +24,13 @@ from dotenv import load_dotenv
 # the `load_dotenv()` function from the `dotenv` library in Python. This is useful for keeping
 # sensitive information, such as API keys or database credentials, separate from the code and stored
 # securely in a file.
+from execute_query import execute_query
+from connection import connection
+import keyboard as keyboard
+import constants as const
+from referral import Referral
+from wallet import Wallet
+
 load_dotenv()
 # Instance of the robot
 # The above code is initializing a Telegram bot using the `telebot` library in Python. It is
@@ -40,7 +47,7 @@ RAILWAY_HOST = os.environ['RAILWAY_HOST']
 RAILWAY_DB = os.environ['RAILWAY_DB']
 RAILWAY_USER = os.environ['RAILWAY_USER']
 RAILWAY_PASSWORD = os.environ['RAILWAY_PASSWORD']
-RAILWAY_PORT = os.environ['RAILWAY_PORT']
+RAILWAY_PORT =int(os.environ['RAILWAY_PORT'])
 TWEEPY_API_KEY=os.environ['TWEEPY_API_KEY']
 TWEEPY_API_SECRET_KEY=os.environ['TWEEPY_API_SECRET_KEY']
 TWEEPY_ACCESS_TOKEN=os.environ['TWEEPY_ACCESS_TOKEN']
@@ -57,498 +64,56 @@ tweepy_api = tweepy.API(auth)
 
 try:
     # Create a connection
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    # instantiate a connection to the database
-    cursor = connection.cursor()
-    # execute a query to get a list of all databases
-    cursor.execute("SHOW DATABASES")
-    databases = cursor.fetchall()
-    # iterate over the list of databases and check if the specified database exists
-    database_name = "railway"
-    for db in cursor:
-        if db[0] == database_name:
-            cursor.execute("USE railway;")
-            break
-        else:
-            cursor.execute("CREATE DATABASE railway; USE railway;")
-    # Create the referral_link table
-    check_for_referral_link_table = """SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'railway' AND table_name = 'referral_link';"""
-    referral_link_table_creation_query = """CREATE TABLE referral_link (
-            user_id INT PRIMARY KEY,
+    conn = connection()
+    
+    cursor = conn.cursor()
+
+    # Attempt to select the database; create it if it does not exist
+    try:
+        cursor.execute(f"USE {RAILWAY_DB};")
+    except mysql.connector.Error as err:
+        print(f"Database {RAILWAY_DB} does not exist. Creating it.")
+        cursor.execute(f"CREATE DATABASE {RAILWAY_DB};")
+        cursor.execute(f"USE {RAILWAY_DB};")
+
+    # Function to check and create table if not exists
+    def check_and_create_table(table_creation_query, table_name):
+        cursor.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '{RAILWAY_DB}' AND table_name = '{table_name}';")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(table_creation_query)
+
+    # Define table creation queries
+    referral_link_table_creation_query = """
+        CREATE TABLE referral_link (
+            user_id VARCHAR(100) PRIMARY KEY,
             referred_link VARCHAR(100)
         );"""
-    select_referral_link_query = """SELECT * FROM referral_link"""
-    cursor.execute(check_for_referral_link_table)
-    referral_link_count = cursor.fetchone()[0]
-    if referral_link_count == 0:
-        cursor.execute(referral_link_table_creation_query)
-    elif referral_link_count == 1:
-        cursor.execute(select_referral_link_query)
-    else:
-        print('Referral link table cannot be found')
-    cursor.fetchall()  # read the result of the last query   
-    # Create the referral_data table
-    check_for_referral_data_table = """SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'railway' AND table_name = 'referral_data';"""
-    referral_data_table_creation_query = """CREATE TABLE referral_data (
+    referral_data_table_creation_query = """
+        CREATE TABLE referral_data (
             user_id VARCHAR(100) PRIMARY KEY,
             referrer_id VARCHAR(100),
             referral_count INT,
-            referral_balance DECIMAL(18,8)
+            referral_balance INT
         );"""
-    select_referral_data_query = """SELECT * FROM referral_data"""
-    cursor.execute(check_for_referral_data_table)
-    referral_data_count = cursor.fetchone()[0]
-    if referral_data_count == 0:
-        cursor.execute(referral_data_table_creation_query)
-    elif referral_data_count == 1:
-        cursor.execute(select_referral_data_query)
-    else:
-        print('Referral data table cannot be found')
-    cursor.fetchall()  # read the result of the last query   
-    # Create the wallet table
-    check_for_wallet_table = """SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'railway' AND table_name = 'wallet';"""
-    wallet_table_creation_query = """CREATE TABLE wallet (
+    wallet_table_creation_query = """
+        CREATE TABLE wallet (
             user_id BIGINT PRIMARY KEY,
             address VARCHAR(42) NOT NULL,
             balance INT
         );"""
-    select_wallet_query = """SELECT * FROM wallet"""
-    cursor.execute(check_for_wallet_table)
-    wallet_count = cursor.fetchone()[0]
-    if wallet_count == 0:
-        cursor.execute(wallet_table_creation_query)
-    elif wallet_count == 1:
-        cursor.execute(select_wallet_query)
-    else:
-        print('Wallet table cannot be found')        
-    cursor.fetchall()  # read the result of the last query   
-    cursor.close()
-    # close the connection
-    connection.close()
-except Error as e:
-    print(f"Error encountered is: {e}")
-# Initializations
-user_airdrop = 1
-SUCCESS_MESSAGE = os.environ['SUCCESS_MESSAGE']
-ERROR_MESSAGE = f"""
-👏 Follow <b><a href="https://x.com/auroraliteaal">us on Twitter</a></b>
 
-👏 Join <b><a href="https://t.me/auroraliteaalchannel">us on Telegram Channel</a></b>
+    # Check and create tables if they don't exist
+    check_and_create_table(referral_link_table_creation_query, 'referral_link')
+    check_and_create_table(referral_data_table_creation_query, 'referral_data')
+    check_and_create_table(wallet_table_creation_query, 'wallet')
 
-👏 Join <b><a href="https://t.me/auroraliteaalgroup">us on Telegram Group</a></b>
+except mysql.connector.Error as e:
+    print(f"Error encountered: {e}")
+finally:
+    if conn and conn.is_connected():
+        cursor.close()
+        conn.close()
 
-😒 Connect with us to continue
-"""
-
-TWITTER_MESSAGE = f"""
-👏 Follow <b><a href="https://x.com/auroraliteaal">us on Twitter</a></b>
-
-😒 Use `/start` to reset it
-
-🗒️ What is your Twitter username:!!? e.g @auroralite
-"""
-WALLET_MESSAGE = f"""
-🗒️ What is your BEP-20(BSC) wallet address!!?
-
-<b><i> Please submit your Trustwallet or SafePal address. Address must be from a Decentralized  platform</i></b>
-"""
-WELCOME_MESSAGE = f"""
-👋 Hello, Old sport! 
-
-🌞 1 AAL = $100
-⛅ Get <b>1 AAL</b> for joining and completing task
-🌬️ Get <b>0.5 AAL</b> per referral 
-
-📝 Airdrop will end soon...
-
-🔥 Complete the task and be deemed eligible
-
-🗒️ <b>TASK:</b>
-
-👏 Follow <b><a href="https://x.com/auroraliteaal">us on Twitter</a></b>
-
-👏 Join <b><a href="https://t.me/auroraliteaalchannel/">us on Telegram Channel</a></b>
-
-👏 Join <b><a href="https://t.me/auroraliteaalgroup/">us on Telegram Group</a></b>
-
-🧏 Use only positive words to chat in the group otherwise you will miss the big opportunity
-
-<b>NOTE: All tasks are mandatory</b>
-
-<b>You can use Admin referral Link: https://t.me/{bot.get_me().username}?start={6243130914} </b>
-"""
-# Define the regular expression to match BSC addresses
-# The above code is defining a regular expression pattern using the `re` module in Python. The pattern
-# is used to match a string that represents a Binance Smart Chain (BSC) address.
-BSC_ADDRESS_REGEX = r'^0x([A-Fa-f0-9]{40})$'
-# Custom define keyboard
-# The above code is defining keyboard buttons for a Telegram bot using the telebot library in Python.
-# The buttons include options for navigating to the home or main menu, subscribing to a service,
-# registering a wallet, changing a wallet address, checking airdrop balance, viewing referrals, and
-# accessing an affiliate program.
-home_button = telebot.types.KeyboardButton('🏠 Home')
-twitter_button = telebot.types.KeyboardButton('🐦‍⬛ Set Username')
-main_menu = telebot.types.KeyboardButton('💢 Main Menu')
-crypto_subscribe = telebot.types.KeyboardButton('🫡 Join us')
-register_wallet = telebot.types.KeyboardButton('😌 Wallet')
-change_wallet_address = telebot.types.KeyboardButton('📰 Change address')
-airdrop_balance = telebot.types.KeyboardButton('🤑 Balance')
-referral = telebot.types.KeyboardButton('🧑‍🤝‍🧑 Referrals')
-affiliate = telebot.types.KeyboardButton('➕ Affiliate')
-# The above code is creating several instances of the `ReplyKeyboardMarkup` and `ReplyKeyboardRemove`
-# classes from the `telebot.types` module in Python. These instances are used to create custom
-# keyboards with different options for the user to choose from in a Telegram bot. The
-# `resize_keyboard` parameter is set to `True` for all instances, which means that the keyboard will
-# be resized to fit the user's screen. The `no_custom_keyboard` instance is used to remove any custom
-# keyboard that was previously displayed to the user. The other instances are used to display
-# different options to the user,
-no_custom_keyboard = telebot.types.ReplyKeyboardRemove()
-main_menu_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-home_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-twitter_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-subscribe_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-wallet_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-affiliate_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-set_wallet_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-# The above code is defining and adding different buttons to various keyboard menus in a Python
-# program. Specifically, it is adding buttons for options such as registering a wallet, checking
-# airdrop balance, accessing referral information, changing wallet address, subscribing to a service,
-# and accessing affiliate information. These buttons are added to different keyboard menus such as the
-# main menu, set wallet menu, home menu, subscribe menu, wallet menu, and affiliate menu.
-main_menu_keyboard.add(register_wallet, airdrop_balance, referral, change_wallet_address)
-set_wallet_keyboard.add(register_wallet)
-home_keyboard.add(crypto_subscribe)
-twitter_keyboard.add(twitter_button)
-subscribe_keyboard.add(register_wallet, airdrop_balance, referral, main_menu)
-wallet_keyboard.add(change_wallet_address, main_menu)
-affiliate_keyboard.add(affiliate)
-
-def execute_query(query, params=None):
-    """
-    Executes the given SQL query on the MySQL database.
-    
-    :param query: The SQL query to execute.
-    :param params: Optional parameter that contains any variables that are used in the SQL query.
-    :return: The result of the query, as returned by the MySQL database.
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    cursor = connection.cursor()
-    if params:
-        cursor.execute(query, params)
-    else:
-        cursor.execute(query)
-    result = cursor.fetchone()[0]
-    cursor.close()
-    connection.close()
-    return result
-
-def referral_link_exists(user_id):
-    """
-    Checks if a referral link exists for a given user ID in the MySQL database.
-    
-    :param user_id: The user ID to check.
-    :return: True if a referral link exists, False otherwise.
-    """
-    select_query = "SELECT COUNT(*) FROM referral_link WHERE user_id = %s"
-    count = execute_query(select_query, (user_id,))
-    return count > 0
-
-def user_referral_link(user_id):
-    """
-    The function retrieves a referred link from a MySQL database based on a user ID.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the system. It is used to
-    retrieve the referral link associated with that user from the database
-    :return: the referred link associated with the user ID passed as a parameter.
-    """
-    select_query = "SELECT referred_link FROM referral_link WHERE user_id = %s"
-    referred_link = execute_query(select_query, (user_id,))
-    return referred_link
-
-def insert_referral_link(user_id, referred_link):
-    """
-    This function inserts a user's referral link into a MySQL database.
-    
-    :param user_id: The ID of the user who is being referred
-    :param referred_link: The referral link that the user has shared with someone else. It could be a
-    unique URL or code that identifies the user as the referrer
-    """
-    if referred_link :
-        with mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    ) as connection:
-            insert_query = "INSERT INTO referral_link (user_id, referred_link) VALUES (%s, %s)"
-            values = (user_id, referred_link)
-            with connection.cursor() as cursor:
-                cursor.execute(insert_query, values)
-            connection.commit()
-    else :
-        with mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    ) as connection:
-            insert_query = "INSERT INTO referral_link (user_id, referred_link) VALUES (%s, %s)"
-            values = (user_id, "https://t.me/auroralite_bot?start={6243130914}")
-            with connection.cursor() as cursor:
-                cursor.execute(insert_query, values)
-            connection.commit()
-
-def populate_referral_data(user_id, referrer_id):
-    """
-    This function populates referral data for a user with their user ID and referrer ID.
-    
-    :param user_id: The ID of the user for whom referral data is being populated
-    :param referrer_id: The ID of the user who referred the new user
-    """
-    with mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    ) as connection:
-        insert_query = "INSERT INTO referral_data (user_id, referrer_id, referral_count, referral_balance) VALUES (%s, %s, %s, %s)"
-        values = (user_id, referrer_id, 0, 0)
-        with connection.cursor() as cursor:
-            cursor.execute(insert_query, values)
-        connection.commit()
-
-def referral_user_data():
-    """
-    This function retrieves the referrer IDs from the "referral_data" table in the "bot"
-    database.
-    :return: a list of referrer IDs from the "referral_data" table in the "bot" database.
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    select_query = "SELECT referrer_id FROM referral_data"
-    cursor = connection.cursor()
-    cursor.execute(select_query)
-    referral_datas = [referral_data[0] for referral_data in cursor]
-    return referral_datas
-
-def referrer_data(user_id):
-    """
-    The function retrieves the referrer ID for a given user ID from a MySQL database.
-    
-    :param user_id: The user ID is a parameter that is passed to the function. It is used to retrieve
-    the referrer ID from the database for the given user. The referrer ID is the ID of the user who
-    referred the current user to the platform or service
-    :return: the referrer_id of a user from the referral_data table in the bot database, based on
-    the user_id provided as an argument.
-    """
-    select_query = "SELECT referrer_id FROM referral_data WHERE user_id = %s"
-    referrer_data = execute_query(select_query, (user_id,))
-    return referrer_data
-def referral_user_count(user_id):
-    """
-    The function retrieves the referral count for a given user ID from a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the referral_data table.
-    It is used to retrieve the referral count for that particular user
-    :return: the referral count of a user with the given user_id from the referral_data table in the
-    bot database.
-    """
-    select_query = "SELECT referral_count FROM referral_data WHERE user_id = %s"
-    count = execute_query(select_query, (user_id,))
-    return count
-def referral_user_balance(user_id):
-    """
-    The function retrieves the referral balance of a user from a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the referral_data table.
-    This function retrieves the referral_balance for the user with the given user_id
-    :return: the referral balance of a user with the given user_id.
-    """
-    select_query = "SELECT referral_balance FROM referral_data WHERE user_id = %s"
-    balance = execute_query(select_query, (user_id,))
-    return balance
-def increment_referral_count(user_id, referral_count):
-    """
-    This function updates the referral count of a user in a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the referral_data table.
-    It is used to identify which user's referral count needs to be updated
-    :param referral_count: The number of referrals that the user has made
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    update_query = "UPDATE referral_data SET referral_count = %s WHERE user_id = %s"
-    cursor = connection.cursor()
-    cursor.execute(update_query, (referral_count, user_id,))
-    connection.commit()
-def increment_referral_balance(user_id, referral_balance):
-    """
-    This function updates the referral balance of a user in a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the referral_data table.
-    It is used to identify which user's referral balance needs to be updated
-    :param referral_balance: The amount by which the referral balance needs to be incremented for the
-    given user ID
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    update_query = "UPDATE referral_data SET referral_balance = %s WHERE user_id = %s"
-    cursor = connection.cursor()
-    cursor.execute(update_query, (referral_balance, user_id,))
-    connection.commit()
-def insert_wallet_data(user_id, address):
-    """
-    This function inserts user wallet data (user ID and address) into a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a user in the system. It is used to associate
-    wallet data with a specific user
-    :param address: The address parameter is a string that represents the wallet address of a user. It
-    is used as a value to be inserted into the "address" column of the "wallet" table in a MySQL
-    database
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    insert_query = "INSERT INTO wallet (user_id, address) VALUES (%s, %s)"
-    values = (user_id, address)
-    cursor = connection.cursor()
-    cursor.execute(insert_query, values)
-    connection.commit()
-def select_wallet():
-    """
-    The function selects the user IDs from the "wallet" table in the "bot" database and returns
-    them as a list.
-    :return: a list of user IDs from the "wallet" table in the "bot" database.
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    select_query = "SELECT user_id FROM wallet LIMIT 1"
-    cursor = connection.cursor()
-    cursor.execute(select_query)
-    users = cursor.fetchall()
-    user_ids = [userid[0] for userid in users]    
-    return user_ids
-def select_wallet_by_user_id(user_id):
-    """
-    This function selects the wallet address associated with a given user ID from a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a user in the database. This function selects
-    the wallet address associated with the given user ID from the "wallet" table in the "bot"
-    database
-    :return: the wallet address of the user with the given user_id from the "wallet" table in the
-    "bot" database.
-    """
-    select_query = "SELECT address FROM wallet WHERE user_id = %s LIMIT 1"
-    wallet_address = execute_query(select_query, (user_id,))
-    return wallet_address
-def insert_wallet_address(user_id, address):
-    """
-    The function inserts a user's wallet address and sets their balance to 0 in a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a user in the system. It could be a numerical
-    or alphanumeric value that is assigned to each user when they register or create an account
-    :param address: The wallet address that the user wants to insert into the database
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    insert_query = "INSERT INTO wallet (user_id, address, balance) VALUES (%s, %s, %s)"
-    values = (user_id, address, 0)
-    cursor = connection.cursor()
-    cursor.execute(insert_query, values)
-    connection.commit()
-def select_balance_by_user_id(user_id):
-    """
-    This function selects the balance of a user's wallet from a MySQL database based on their user ID.
-    
-    :param user_id: The user ID is a unique identifier for a user in the database. It is used to
-    retrieve the wallet balance associated with that user
-    :return: the balance of a user's wallet from the database, based on their user ID.
-    """
-    select_query = "SELECT balance FROM wallet WHERE user_id = %s LIMIT 1"
-    wallet_balance = execute_query(select_query, (user_id,))
-    return wallet_balance
-def update_wallet_balance(user_id, balance):
-    """
-    The function updates the balance of a user's wallet in a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the database. It is used
-    to identify which user's wallet balance needs to be updated
-    :param balance: The new balance that you want to update for the user's wallet
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    update_query = "UPDATE wallet SET balance = %s WHERE user_id = %s"
-    cursor = connection.cursor()
-    cursor.execute(update_query, (balance, user_id,))
-    connection.commit()
-def update_wallet_address(user_id, address):
-    """
-    The function updates the wallet address of a user in a MySQL database.
-    
-    :param user_id: The user ID is a unique identifier for a specific user in the database. It is used
-    to identify which user's wallet address needs to be updated
-    :param address: The new wallet address that needs to be updated in the database
-    """
-    connection = mysql.connector.connect(
-        host=RAILWAY_HOST,
-        database=RAILWAY_DB,
-        user=RAILWAY_USER,
-        password=RAILWAY_PASSWORD,
-        port=RAILWAY_PORT
-    )
-    update_query = "UPDATE wallet SET address = %s WHERE user_id = %s"
-    cursor = connection.cursor()
-    cursor.execute(update_query, (address, user_id,))
-    connection.commit()
 # The above code is defining two message handlers for a Python Telegram bot. The first handler is
 # triggered when the user sends the "/start" command to the bot, and the second handler is triggered
 # when the user sends the "🏠 Home" message to the bot. Both handlers will execute a specific block of
@@ -564,10 +129,11 @@ def send_welcome(message):
     message
     """
     try:
-        bot.reply_to(message, WELCOME_MESSAGE, reply_markup=home_keyboard, parse_mode='html')        
+        bot.reply_to(message, const.WELCOME_MESSAGE, reply_markup=keyboard.home_keyboard, parse_mode='html')        
     except telebot.apihelper.ApiTelegramException as e:
         # Handle the error message appropriately
-        bot.reply_to(message, f"An error has occurred: {e}")
+        bot.reply_to(message, "Slow Connection Detected Restart Bot `/start`")
+
 # The above code is defining a message handler for a Telegram bot using the Python programming
 # language. Specifically, it is using a lambda function to check if the user's message text is equal
 # to "➕ Affiliate". If the message matches, the handler will be triggered and the bot will perform
@@ -580,19 +146,18 @@ def handle_referrals(message):
     
     :param message: The message object received by the bot from the user. It contains information about
     the user, the chat, and the message itself
-    """
+    """    
     try:
-        # Get the user's unique ID
-        user_id = message.chat.id
+        user = Referral(user_id=message.chat.id, input_link=None, referrer_id=None)
         # Check if the user was referred by someone
+        link, status = user.has_link()
         if 'start=' not in message.text:        
-            bot.reply_to(message, "👇 Forward a referrer's link ", reply_markup=no_custom_keyboard)
+            bot.reply_to(message, const.REFERRAL_LINK_MESSAGE, reply_markup=keyboard.no_custom_keyboard)
             
-            if referral_link_exists(user_id) is True:
-                response = user_referral_link(user_id)
-                bot.send_message(message.chat.id, response, reply_markup=set_wallet_keyboard)
-            elif referral_link_exists(user_id) is False:                   
-                @bot.message_handler(func=lambda message: message.chat.id == user_id and 'https://t.me/aal?start=' in message.text)
+            if status is True:
+                bot.send_message(message.chat.id, link, reply_markup=keyboard.set_wallet_keyboard)
+            elif status is False:                   
+                @bot.message_handler(func=lambda message: message.chat.id == message.chat.id and 'https://t.me/auroralite_bot?start=' in message.text)
                 def handle_referrals(message):
                     # Extract the referrer's ID from the message
                     """
@@ -601,31 +166,32 @@ def handle_referrals(message):
                     Then it increments both their balance and their referrer's balance by 10.
                     
                     :param message: Extract the referrer's id from the message
-                    :return: The referral_user_data() list
                     :doc-author: Trelent
                     """
-                    if referral_link_exists(user_id) is False:      
-                            insert_referral_link(user_id, message.text)             
-                            referrer = message.text.split('start=')[1]
                     
-                    # Add the referral data to the dictionary
-                    populate_referral_data(user_id, referrer)
-                    referral_user_data()
-                    
-                    for data in referral_user_data():                                        
-                        # Increment the referral count for the referrer
-                        if data == referrer:
-                            new_count = referral_user_count(data)+ 1
-                            increment_referral_count(data, new_count)
-                                    
-                            # Add the referral bonus to the referrer's balance
-                            new_balance = referral_user_balance(data) + 10
-                            increment_referral_balance(data, new_balance)              
+                    if status is False:
+                        user = Referral(user_id=message.chat.id, input_link=message.text, referrer_id=None)
+                        user.add_link()  
                         
-                    bot.reply_to(message, f"Welcome to our bot! You were referred by user ID {data}.", reply_markup=set_wallet_keyboard,)
+                    referrer = message.text.split('start=')[1]
+                    user = Referral(user_id=message.chat.id, input_link=message.text, referrer_id=referrer)
+                    user.add_referrer_data()
+                    
+                    try:
+                        id, count, balance = Referral(user_id=referrer, input_link=None, referrer_id=None).referrer_data()                     
+                        
+                        increment_data = Referral(user_id=referrer, input_link=None, referrer_id=None, referral_count=count + 1, referral_balance=balance + const.user_airdrop)
+                        increment_data.increment()                        
+                        
+                    except:
+                        print('An exception occurred')           
+                        
+                    bot.reply_to(message, f"Welcome to our bot! You were referred by user ID {referrer}.", reply_markup=keyboard.set_wallet_keyboard,)
     except telebot.apihelper.ApiTelegramException as e:
         # Handle the error message appropriately
-        bot.reply_to(message, f"An error has occurred") 
+        print(e)
+        bot.reply_to(message, "Slow Connection Detected Restart Bot `/start`")
+
 # The above code is defining a message handler for the bot. It will handle messages that have the text
 # "💢 Main Menu". When a user sends a message with this text, the function associated with this
 # handler will be executed.
@@ -638,12 +204,13 @@ def send_commands(message):
     chat ID, sender ID, and message text
     """
     response = "💢 Main Menu"
-    bot.send_message(message.chat.id, response, reply_markup=main_menu_keyboard)
+    bot.send_message(message.chat.id, response, reply_markup=keyboard.main_menu_keyboard)
 
 # The above code is defining a message handler for a Telegram bot using the Python programming
 # language. Specifically, it is using the `func` parameter to check if the incoming message text is
 # equal to "🫡 Join us". If the message text matches, the handler will be triggered and the bot will
 # perform some action.
+
 @bot.message_handler(func=lambda message: message.text == '🫡 Join us')
 def subscribe_handler(message):
     """
@@ -657,7 +224,7 @@ def subscribe_handler(message):
     an exception and sends an error message.
     """
     user_id = message.chat.id
-    bot.reply_to(message, TWITTER_MESSAGE, reply_markup=twitter_keyboard, parse_mode='html')
+    bot.reply_to(message, const.TWITTER_MESSAGE, reply_markup=keyboard.no_custom_keyboard, parse_mode='html')
     @bot.message_handler(func=lambda message: message.chat.id == user_id and '@' in message.text)
     def handle_subscriber(message):
         if message :
@@ -669,36 +236,37 @@ def subscribe_handler(message):
                 try:
                     group_member = bot.get_chat_member('@auroraliteaalgroup', user_id)
                     if group_member.status not in ['member', 'administrator', 'creator']:
-                        bot.reply_to(message, ERROR_MESSAGE, parse_mode='html')
+                        bot.reply_to(message, const.ERROR_MESSAGE, parse_mode='html')
                         return
                 except telebot.apihelper.ApiTelegramException as e:
                     print(f"Telegram API error: {e}")
-                    bot.reply_to(message, ERROR_MESSAGE, parse_mode='html')
+                    bot.reply_to(message, const.ERROR_MESSAGE, parse_mode='html')
                     return
                         
                 # Check if the user follows the Twitter account
-                try:
-                    twitter_user = tweepy_api.get_user(screen_name='auroraliteaal')
-                    source_user = tweepy_api.get_user(screen_name=message)  # Using the obtained Twitter username/ID
-                    relationship = tweepy_api.show_friendship(source_id=source_user.id_str, target_id=twitter_user.id_str)
-                    if not relationship[0].following:
-                        bot.reply_to(message, SUCCESS_MESSAGE, reply_markup=set_wallet_keyboard, parse_mode='html')
-                        return
-                except Exception as e:
-                    print(f"Twitter API error: {e}")
-                    bot.reply_to(message, SUCCESS_MESSAGE, reply_markup=set_wallet_keyboard, parse_mode='html')
-                    return
+                # try:
+                #     twitter_user = tweepy_api.get_user(screen_name='auroraliteaal')
+                #     source_user = tweepy_api.get_user(screen_name=message)  # Using the obtained Twitter username/ID
+                #     relationship = tweepy_api.show_friendship(source_id=source_user.id_str, target_id=twitter_user.id_str)
+                #     if not relationship[0].following:
+                #         bot.reply_to(message, const.SUCCESS_MESSAGE, reply_markup=keyboard.affiliate_keyboard, parse_mode='html')
+                #         return
+                # except Exception as e:
+                #     print(f"Twitter API error: {e}")
+                #     bot.reply_to(message, const.SUCCESS_MESSAGE, reply_markup=keyboard.affiliate_keyboard, parse_mode='html')
+                #     return
                 
                 # If all checks pass
-                bot.reply_to(message, SUCCESS_MESSAGE)
+                bot.reply_to(message, const.SUCCESS_MESSAGE, reply_markup=keyboard.affiliate_keyboard)
             
             except Exception as e:
                 # General exception handling
                 print(f"An error occurred: {e}")
-                bot.reply_to(message, ERROR_MESSAGE, parse_mode='html')
+                bot.reply_to(message, const.ERROR_MESSAGE, parse_mode='html')
 
 # The above code is defining a message handler for a Telegram bot using the Python programming
 # language. The handler is triggered when the user sends a message with the text "📰 Change address".
+
 @bot.message_handler(func=lambda message: message.text == '📰 Change address')
 def change_wallet_address(message):
     """
@@ -710,38 +278,41 @@ def change_wallet_address(message):
     """
     try:
         user_id = message.chat.id
+        wallet = Wallet(user_id=message.chat.id, address=None, balance=0)
 
         # Check if user already has a wallet then ask for wallet to be deleted
-        if user_id in select_wallet():
+        if user_id in wallet.select_wallet():
             bot.reply_to(message, "🆕 What is your new address? ")
             
              # Wait for user input
             @bot.message_handler(func=lambda message: message.chat.id == user_id and '0x' in message.text)
             def handle_wallet_address(message):
                 # Check if the message contains a BSC address
-                match = re.search(BSC_ADDRESS_REGEX, message.text.strip())
+                match = re.search(const.BSC_ADDRESS_REGEX, message.text.strip())
                 
                 if match:
                     # Store the wallet address
                     bsc_address = match.group(0)
+                    wallet = Wallet(user_id=message.chat.id, address=bsc_address)
                     # Set wallet address to the wallet dictionary
-                    update_wallet_address(user_id, bsc_address)
+                    wallet.update_address()
                     # Successful reply
-                    bot.reply_to(message, "Your wallet address has been saved. Thank you!", reply_markup=subscribe_keyboard)
+                    bot.reply_to(message, "Your wallet address has been saved. Thank you!", reply_markup=keyboard.subscribe_keyboard)
                 else:
                     bot.reply_to(message, "Unacceptable wallet address.")
         else:
-            bot.reply_to(message, "You don't have a wallet to reset.", reply_markup=subscribe_keyboard)
+            bot.reply_to(message, "You don't have a wallet to reset.", reply_markup=keyboard.subscribe_keyboard)
            
     except telebot.apihelper.ApiTelegramException as e:
         # Catch the ApiTelegramException and print the error message
         print(f"An error occurred: {e}")
         # Handle the error message appropriately
-        bot.reply_to(message, "An error has occurred")
+        bot.reply_to(message, "Slow Connection Detected Restart Bot `/start`")
 # The above code is defining a message handler for a Telegram bot using the Python programming
 # language. Specifically, it is using the `func` parameter to check if the user's message text is
 # equal to "😌 Wallet". If the message matches, the handler will be triggered and the bot will perform
 # some action.
+
 @bot.message_handler(func=lambda message: message.text == '😌 Wallet')
 def prompt_for_wallet(message):
     """
@@ -753,28 +324,31 @@ def prompt_for_wallet(message):
     """
     try:
         user_id = message.chat.id
+        wallet = Wallet(user_id=message.chat.id, address=None, balance=0)
+        
+        address, balance = wallet.select_wallet_by_user_id()
         
         # Check if user already has a wallet
-        if user_id in select_wallet():
-            bot.reply_to(message, f"Your wallet address is {select_wallet_by_user_id(user_id)}", reply_markup=wallet_keyboard,)
+        if user_id in wallet.select_wallet():
+            bot.reply_to(message, f"Your wallet address is {address}", reply_markup=keyboard.wallet_keyboard,)
         else:   
             # Ask the user for their BEP-20 wallet address
-            bot.reply_to(message, WALLET_MESSAGE, parse_mode='html')
+            bot.reply_to(message, const.WALLET_MESSAGE, parse_mode='html')
             
             # Wait for user input
             @bot.message_handler(func=lambda message: message.chat.id == user_id and '0x' in message.text)
             def handle_wallet_address(message):
                 # Check if the message contains a BSC address
-                match = re.search(BSC_ADDRESS_REGEX, message.text.strip())
+                match = re.search(const.BSC_ADDRESS_REGEX, message.text.strip())
                 
                 if match:
                     # Store the wallet address
                     bsc_address = match.group(0)
                     
-                    insert_wallet_address(user_id, bsc_address)
+                    set_wallet = Wallet(user_id=message.chat.id, address=bsc_address,balance=const.user_airdrop)
+                    set_wallet.insert_wallet()
                     # Successful reply
-                    bot.reply_to(message, "Your wallet address has been saved. Thank you!", reply_markup=subscribe_keyboard)
-                    update_wallet_balance(user_id, user_airdrop)
+                    bot.reply_to(message, "Your wallet address has been saved. Thank you!", reply_markup=keyboard.subscribe_keyboard)
                 else:
                     bot.reply_to(message, "Unacceptable wallet address.")
     except telebot.apihelper.ApiTelegramException as e:
@@ -786,6 +360,7 @@ def prompt_for_wallet(message):
 # language. Specifically, it is using the `func` parameter to check if the user's message text is
 # equal to "🤑 Balance". If the message matches, the handler will be triggered and the bot will
 # perform some action (which is not shown in the code snippet).
+
 @bot.message_handler(func=lambda message: message.text == '🤑 Balance')
 def check_airdrop_balance(message):
     """
@@ -796,19 +371,21 @@ def check_airdrop_balance(message):
     the content of the message
     """
     # Get the user's unique ID
-    user_id = message.chat.id
+    id, count, referrer_balance = Referral(user_id=message.chat.id).referrer_data()
+    address, wallet_balance = Wallet(user_id=message.chat.id, address=None, balance=0).select_wallet_by_user_id()
     
-    # Calculate the total balance for the user
-    total_balance = select_balance_by_user_id(user_id) + referral_user_balance(user_id)
-    
+    total_balance = wallet_balance + referrer_balance
+        
+        
     response = f"""
-    😲 You've earned {select_balance_by_user_id(user_id)} AAL from our airdrop\n\n🔄️ Your referral count is {referral_user_count(user_id)} and your referral balance is {referral_user_balance(user_id)} AAL.\n\n🗿 Total balance is {total_balance} AAL
+    😲 You've earned {wallet_balance} AAL from our airdrop\n\n🔄️ Your referral count is {count} and your referral balance is {referrer_balance} AAL.\n\n🗿 Total balance is {total_balance} AAL
     """
     bot.send_message(message.chat.id, response)
 # The above code is defining a message handler for a Telegram bot using the Python programming
 # language. Specifically, it is using the `func` parameter to check if the user's message text is
 # equal to "🧑‍🤝‍🧑 Referrals". If the user sends this message, the message handler will be triggered
 # and the bot will perform some action (which is not shown in the code snippet).
+
 @bot.message_handler(func=lambda message: message.text == '🧑‍🤝‍🧑 Referrals')
 def show_referral_info(message):
     """
@@ -818,10 +395,9 @@ def show_referral_info(message):
     :param message: The message object that contains information about the user who triggered the
     function
     """
-    # Get the user's unique ID
-    user_id = message.chat.id
+    id, count, balance = Referral(user_id=message.chat.id, input_link=None, referrer_id=None, referral_count=None, referral_balance=None).referrer_data()                     
         
-    bot.reply_to(message, f"You were referred by user ID {referrer_data(user_id)}.\n\n Your referral count is {referral_user_count(user_id)} and your referral balance is {int(referral_user_balance(user_id))} AAL.\n\n🔗 Your referral link is https://t.me/{bot.get_me().username}?start={user_id}") 
+    bot.reply_to(message, f"You were referred by user ID {id}.\n\n Your referral count is {count} and your referral balance is {balance} AAL.\n\n🔗 Your referral link is https://t.me/{bot.get_me().username}?start={message.chat.id}") 
 # The above code is using the Python library `python-telegram-bot` to create a bot that can receive
 # and respond to messages on the Telegram messaging platform. The `bot.infinity_polling()` method is
 # used to continuously poll for new messages and handle them appropriately. The `try-except` block is
