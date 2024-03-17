@@ -1,6 +1,7 @@
 # The above code is importing the "os" module in Python. This module provides a way of using operating
 # system dependent functionality like reading or writing to the file system.
 import os
+import time
 # The above code is importing the `telebot` module in Python. This module is used to create a Telegram
 # bot and interact with the Telegram API. However, the code snippet is incomplete and does not contain
 # any further instructions or code to create a bot or perform any actions.
@@ -183,8 +184,8 @@ def handle_referrals(message):
                         increment_data = Referral(user_id=referrer, input_link=None, referrer_id=None, referral_count=count + 1, referral_balance=balance + const.user_airdrop)
                         increment_data.increment()                        
                         
-                    except:
-                        print('An exception occurred')           
+                    except mysql.connector.Error as e:
+                        print('Error', e)           
                         
                     bot.reply_to(message, f"Welcome to our bot! You were referred by user ID {referrer}.", reply_markup=keyboard.set_wallet_keyboard,)
     except telebot.apihelper.ApiTelegramException as e:
@@ -294,6 +295,7 @@ def change_wallet_address(message):
                     # Store the wallet address
                     bsc_address = match.group(0)
                     wallet = Wallet(user_id=message.chat.id, address=bsc_address)
+                    
                     # Set wallet address to the wallet dictionary
                     wallet.update_address()
                     # Successful reply
@@ -398,6 +400,37 @@ def show_referral_info(message):
     id, count, balance = Referral(user_id=message.chat.id, input_link=None, referrer_id=None, referral_count=None, referral_balance=None).referrer_data()                     
         
     bot.reply_to(message, f"You were referred by user ID {id}.\n\n Your referral count is {count} and your referral balance is {balance} AAL.\n\n🔗 Your referral link is https://t.me/{bot.get_me().username}?start={message.chat.id}") 
+
+
+last_claim_times ={}
+
+@bot.message_handler(func=lambda message: message.text == '🌞 Daily Claim')
+def daily_claim(message):
+    user_id = message.chat.id
+    current_time = time.time()
+    
+    # Check if the user has made a claim before
+    if user_id in last_claim_times:
+        last_claim_time = last_claim_times[user_id]
+        # Check if enough time has elapsed since the last claim (4 minutes = 240 seconds)
+        if current_time - last_claim_time < 86399:
+            # If not enough time has passed, inform the user
+            bot.reply_to(message, "Please wait 24hrs before claiming again.")
+            return
+    
+    # Update the last claim time for the user
+    last_claim_times[user_id] = current_time
+    
+    # Perform the claim operation
+    address, wallet_balance = Wallet(user_id=user_id, address=None, balance=0).select_wallet_by_user_id()
+    try:
+        Wallet(user_id=user_id, address=None, balance=wallet_balance+1).update_balance()
+    except Exception as e:
+        print('An exception occurred:', e)
+    
+    # Notify the user about the successful claim
+    bot.reply_to(message, "1 AAl 🌞 Claimed")
+
 # The above code is using the Python library `python-telegram-bot` to create a bot that can receive
 # and respond to messages on the Telegram messaging platform. The `bot.infinity_polling()` method is
 # used to continuously poll for new messages and handle them appropriately. The `try-except` block is

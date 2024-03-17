@@ -21,7 +21,7 @@ def connection():
             password=RAILWAY_PASSWORD,
             port=RAILWAY_PORT
         )
-    except:
-      print('An exception occurred')
+    except mysql.connector.Error as e:
+      print('An exception occurred', e)
       
     return conn

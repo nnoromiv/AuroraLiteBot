@@ -8,7 +8,7 @@ import telebot
 # registering a wallet, changing a wallet address, checking airdrop balance, viewing referrals, and
 # accessing an affiliate program.
 home_button = telebot.types.KeyboardButton('🏠 Home')
-twitter_button = telebot.types.KeyboardButton('🐦‍⬛ Set Username')
+# twitter_button = telebot.types.KeyboardButton('🐦‍⬛ Set Username')
 main_menu = telebot.types.KeyboardButton('💢 Main Menu')
 crypto_subscribe = telebot.types.KeyboardButton('🫡 Join us')
 register_wallet = telebot.types.KeyboardButton('😌 Wallet')
@@ -16,6 +16,7 @@ change_wallet_address = telebot.types.KeyboardButton('📰 Change address')
 airdrop_balance = telebot.types.KeyboardButton('🤑 Balance')
 referral = telebot.types.KeyboardButton('🧑‍🤝‍🧑 Referrals')
 affiliate = telebot.types.KeyboardButton('➕ Affiliate')
+daily_claim = telebot.types.KeyboardButton('🌞 Daily Claim')
 # The above code is creating several instances of the `ReplyKeyboardMarkup` and `ReplyKeyboardRemove`
 # classes from the `telebot.types` module in Python. These instances are used to create custom
 # keyboards with different options for the user to choose from in a Telegram bot. The
@@ -26,7 +27,7 @@ affiliate = telebot.types.KeyboardButton('➕ Affiliate')
 no_custom_keyboard = telebot.types.ReplyKeyboardRemove()
 main_menu_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
 home_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-twitter_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+# twitter_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
 subscribe_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
 wallet_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
 affiliate_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -36,10 +37,10 @@ set_wallet_keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
 # airdrop balance, accessing referral information, changing wallet address, subscribing to a service,
 # and accessing affiliate information. These buttons are added to different keyboard menus such as the
 # main menu, set wallet menu, home menu, subscribe menu, wallet menu, and affiliate menu.
-main_menu_keyboard.add(register_wallet, airdrop_balance, referral, change_wallet_address)
+main_menu_keyboard.add(daily_claim, register_wallet, airdrop_balance, referral, change_wallet_address)
 set_wallet_keyboard.add(register_wallet)
 home_keyboard.add(crypto_subscribe)
-twitter_keyboard.add(twitter_button)
+# twitter_keyboard.add(twitter_button)
 subscribe_keyboard.add(register_wallet, airdrop_balance, referral, main_menu)
 wallet_keyboard.add(change_wallet_address, main_menu)
 affiliate_keyboard.add(affiliate)

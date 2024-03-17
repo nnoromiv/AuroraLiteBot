@@ -106,4 +106,4 @@ class Wallet:
             cursor.execute(update_query, (self.address, self.user_id,))
             conn.commit()
         except Error as e:
-          print('An exception occurred', e)        
+          print('An exception occurred', e)     
